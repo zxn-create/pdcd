@@ -2679,16 +2679,10 @@ def provide_download_button(image_rgb, filename, button_text, unique_key_suffix=
     except Exception as e:
         st.error(f"下载功能出错: {str(e)}")
 
-def create_color_histogram(image_rgb, title="颜色直方图"):
+def create_color_histogram(image_rgb, title="Color Histogram"):
     """
     创建RGB颜色直方图并返回Matplotlib图形
-    
-    Args:
-        image_rgb: RGB格式的图像数组（或灰度图）
-        title: 直方图标题
-    
-    Returns:
-        fig: Matplotlib图形对象
+    使用英文标题避免字体问题
     """
     # 检查图像维度
     if len(image_rgb.shape) == 2:
@@ -2707,10 +2701,10 @@ def create_color_histogram(image_rgb, title="颜色直方图"):
         # 绘制直方图（灰色）
         ax.plot(hist_gray, color='gray', label='Gray', alpha=0.7, linewidth=2)
         
-        # 设置图形属性
+        # 设置图形属性（使用英文）
         ax.set_title(title, fontsize=14, fontweight='bold', color='#333')
-        ax.set_xlabel('像素强度', fontsize=12)
-        ax.set_ylabel('归一化频率', fontsize=12)
+        ax.set_xlabel('Pixel Intensity', fontsize=12)
+        ax.set_ylabel('Normalized Frequency', fontsize=12)
         ax.grid(True, alpha=0.3)
         ax.legend()
         
@@ -2739,20 +2733,12 @@ def create_color_histogram(image_rgb, title="颜色直方图"):
         ax.plot(hist_g, color='green', label='Green', alpha=0.7, linewidth=2)
         ax.plot(hist_b, color='blue', label='Blue', alpha=0.7, linewidth=2)
         
-        # 设置图形属性
+        # 设置图形属性（使用英文）
         ax.set_title(title, fontsize=14, fontweight='bold', color='#333')
-        ax.set_xlabel('像素强度', fontsize=12)
-        ax.set_ylabel('归一化频率', fontsize=12)
+        ax.set_xlabel('Pixel Intensity', fontsize=12)
+        ax.set_ylabel('Normalized Frequency', fontsize=12)
         ax.grid(True, alpha=0.3)
         ax.legend()
-    
-    else:
-        # 未知格式
-        fig, ax = plt.subplots(figsize=(10, 4))
-        ax.text(0.5, 0.5, '无法生成直方图\n图像格式不支持', 
-                horizontalalignment='center', verticalalignment='center',
-                transform=ax.transAxes, fontsize=12, color='red')
-        ax.set_title(title, fontsize=14, fontweight='bold', color='#333')
     
     # 设置背景色
     fig.patch.set_facecolor('#f8f9fa')
@@ -2831,7 +2817,7 @@ def display_comparison_with_histograms(original_rgb, processed_rgb, original_tit
         
         # 原始图像直方图
         with st.expander("📊 原始图像颜色直方图", expanded=True):
-            fig_orig = create_color_histogram(original_rgb, "原始图像颜色分布")
+            fig_orig = create_color_histogram(original_rgb, "Original Image Histogram")
             st.pyplot(fig_orig)
     
     with col2:
@@ -2841,7 +2827,7 @@ def display_comparison_with_histograms(original_rgb, processed_rgb, original_tit
         
         # 处理后图像直方图
         with st.expander("📊 处理后图像颜色直方图", expanded=True):
-            fig_proc = create_color_histogram(processed_rgb, "处理后图像颜色分布")
+            fig_proc = create_color_histogram(processed_rgb, "Processed Image Histogram")
             st.pyplot(fig_proc)
     
     # 分割线
