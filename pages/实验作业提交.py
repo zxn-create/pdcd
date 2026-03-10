@@ -648,7 +648,6 @@ BUCKET_EXPERIMENT_CARDS = "experiment_cards"
 BUCKET_TEACHER_MATERIALS = "teacher_materials"
 
 # ==================== 检查并创建存储桶 ====================
-# ==================== 检查并创建存储桶 ====================
 def ensure_storage_buckets():
     """确保存储桶可用 - 简化版"""
     required_buckets = [BUCKET_ASSIGNMENTS, BUCKET_EXPERIMENT_CARDS, BUCKET_TEACHER_MATERIALS]
@@ -674,8 +673,6 @@ def ensure_storage_buckets():
                 # 静默失败，不显示警告
                 print(f"存储桶 {bucket_name} 不可用: {create_error}")
 
-# 执行存储桶检查
-ensure_storage_buckets()
 # 执行存储桶检查
 ensure_storage_buckets()
 
@@ -791,7 +788,14 @@ def save_uploaded_files_to_storage(uploaded_files, student_username, assignment_
             # 生成存储路径: student_username/assignment_id/timestamp_filename
             timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
             safe_filename = "".join(c for c in uploaded_file.name if c.isalnum() or c in "._- ").rstrip()
-            storage_path = f"{student_username}/{assignment_id}/{timestamp}_{safe_filename}"
+            safe_filename = safe_filename.replace(' ', '_')
+            
+            # 确保所有参数都是安全的
+            safe_username = str(student_username).replace('/', '_').replace('\\', '_')
+            safe_assignment_id = str(assignment_id).replace('/', '_').replace('\\', '_')
+            
+            # 使用下划线连接，避免使用斜杠
+            storage_path = f"{safe_username}_{safe_assignment_id}_{timestamp}_{safe_filename}"
             
             # 上传文件
             success, result, path = upload_file_to_storage(
@@ -821,8 +825,33 @@ def save_teacher_files_to_storage(uploaded_files, teacher_username, assignment_i
     if uploaded_files:
         for uploaded_file in uploaded_files:
             timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-            safe_filename = "".join(c for c in uploaded_file.name if c.isalnum() or c in "._- ").rstrip()
-            storage_path = f"{teacher_username}/{assignment_id}/{timestamp}_{safe_filename}"
+            
+            # 清理文件名 - 只保留安全字符
+            safe_filename = "".join(c for c in uploaded_file.name if c.isalnum() or c in "._-").rstrip()
+            safe_filename = safe_filename.replace(' ', '_')
+            
+            # 关键修复：确保 assignment_id 是安全的
+            # 如果 assignment_id 是整数，直接转换
+            if isinstance(assignment_id, int):
+                safe_assignment_id = str(assignment_id)
+            else:
+                # 如果是字符串，移除所有可能的路径分隔符
+                safe_assignment_id = str(assignment_id).replace('/', '_').replace('\\', '_')
+                # 只保留安全字符
+                safe_assignment_id = "".join(c for c in safe_assignment_id if c.isalnum() or c in "._-")
+            
+            # 确保 teacher_username 也是安全的
+            safe_username = str(teacher_username).replace('/', '_').replace('\\', '_')
+            safe_username = "".join(c for c in safe_username if c.isalnum() or c in "._-")
+            
+            # 生成存储路径：使用下划线连接所有部分，绝对不使用斜杠
+            storage_path = f"{safe_username}_{safe_assignment_id}_{timestamp}_{safe_filename}"
+            
+            # 最终确保没有任何斜杠
+            storage_path = storage_path.replace('/', '_').replace('\\', '_')
+            
+            print(f"上传文件: {uploaded_file.name}")
+            print(f"存储路径: {storage_path}")
             
             success, result, path = upload_file_to_storage(
                 uploaded_file, 
@@ -834,6 +863,10 @@ def save_teacher_files_to_storage(uploaded_files, teacher_username, assignment_i
                 saved_files.append(uploaded_file.name)
                 file_paths.append(storage_path)
                 public_urls.append(result)
+                print(f"文件上传成功: {storage_path}")
+            else:
+                st.error(f"文件 {uploaded_file.name} 上传失败: {result}")
+                print(f"上传失败详情: {result}")
     
     return saved_files, file_paths, public_urls
 
@@ -1290,8 +1323,12 @@ def save_experiment_card(assignment_id, teacher_username, card_content, uploaded
         file_paths = []
         
         if uploaded_files:
+            # 在传递之前确保所有参数都是安全的
+            safe_username = str(teacher_username).replace('/', '_').replace('\\', '_')
+            safe_assignment_id = str(assignment_id).replace('/', '_').replace('\\', '_')
+            
             saved_files, file_paths, _ = save_teacher_files_to_storage(
-                uploaded_files, teacher_username, assignment_id, "experiment_cards"
+                uploaded_files, safe_username, safe_assignment_id, "experiment_cards"
             )
         
         experiment_card_content = card_content
