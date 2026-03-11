@@ -15,6 +15,8 @@ from scipy import ndimage
 from scipy.signal import convolve2d
 import matplotlib.pyplot as plt
 import warnings
+import re
+import unicodedata
 warnings.filterwarnings('ignore')
 
 # ==================== Supabase 相关导入 ====================
@@ -34,7 +36,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 现代化实验室CSS（增强版）
+# 现代化实验室CSS（增强版）- 保持原有CSS不变
 st.markdown("""
 <style>
 :root {
@@ -632,6 +634,170 @@ section[data-testid="stSidebar"] {
 </style>
 """, unsafe_allow_html=True)
 
+# ==================== 增强的文件名清理工具函数 ====================
+
+def sanitize_filename(filename):
+    """
+    清理文件名，确保只包含ASCII字符，适合Supabase Storage
+    
+    Args:
+        filename: 原始文件名
+    
+    Returns:
+        清理后的安全文件名（只包含字母、数字、点、下划线、连字符）
+    """
+    # 首先，将Unicode字符（包括中文）转换为ASCII表示或删除
+    # 使用NFKD规范化，将Unicode字符分解为基本字符+组合标记
+    normalized = unicodedata.normalize('NFKD', filename)
+    # 只保留ASCII字符，其他都转换为下划线
+    ascii_only = []
+    for char in normalized:
+        if ord(char) < 128:  # ASCII字符
+            ascii_only.append(char)
+        else:
+            # 非ASCII字符（如中文）转换为下划线
+            ascii_only.append('_')
+    
+    safe_name = ''.join(ascii_only)
+    
+    # 替换不安全的字符
+    # 只允许字母、数字、点、下划线、连字符
+    safe_name = re.sub(r'[^\w\s\.\-]', '_', safe_name)
+    # 将空格替换为下划线
+    safe_name = safe_name.replace(' ', '_')
+    # 移除连续的多个下划线
+    safe_name = re.sub(r'_+', '_', safe_name)
+    # 移除开头和结尾的下划线
+    safe_name = safe_name.strip('_')
+    
+    # 如果文件名为空，使用时间戳
+    if not safe_name:
+        safe_name = f"file_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
+    # 处理文件扩展名
+    # 查找最后一个点，确保有扩展名
+    parts = safe_name.rsplit('.', 1)
+    if len(parts) > 1:
+        base_name = parts[0]
+        ext = parts[1]
+        # 清理扩展名部分，只保留字母和数字
+        ext = re.sub(r'[^a-zA-Z0-9]', '', ext)
+        if ext:
+            # 确保基本名称不为空
+            if not base_name:
+                base_name = f"file_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+            safe_name = f"{base_name}.{ext}"
+        else:
+            safe_name = base_name
+    else:
+        safe_name = parts[0]
+    
+    # 再次确保名称不为空
+    if not safe_name:
+        safe_name = f"file_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
+    return safe_name
+
+def sanitize_path_component(component):
+    """
+    清理路径组件，确保用于构建存储路径的部分是安全的（只包含ASCII字符）
+    
+    Args:
+        component: 路径组件（如用户名、作业ID等）
+    
+    Returns:
+        清理后的安全组件
+    """
+    # 将组件转换为字符串
+    str_component = str(component)
+    
+    # 将Unicode字符转换为ASCII或下划线
+    normalized = unicodedata.normalize('NFKD', str_component)
+    ascii_only = []
+    for char in normalized:
+        if ord(char) < 128:
+            ascii_only.append(char)
+        else:
+            ascii_only.append('_')
+    
+    safe_component = ''.join(ascii_only)
+    
+    # 只保留字母、数字和下划线
+    safe_component = re.sub(r'[^\w]', '_', safe_component)
+    # 移除连续的多个下划线
+    safe_component = re.sub(r'_+', '_', safe_component)
+    # 移除开头和结尾的下划线
+    safe_component = safe_component.strip('_')
+    
+    # 如果为空，返回一个默认值
+    if not safe_component:
+        safe_component = f"component_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
+    return safe_component
+
+def create_safe_storage_path(username, assignment_id, original_filename):
+    """
+    创建安全的存储路径（只包含ASCII字符）
+    
+    Args:
+        username: 用户名
+        assignment_id: 作业ID
+        original_filename: 原始文件名
+    
+    Returns:
+        安全的存储路径字符串
+    """
+    # 清理各个组件
+    safe_username = sanitize_path_component(username)
+    safe_assignment_id = sanitize_path_component(assignment_id)
+    safe_filename = sanitize_filename(original_filename)
+    
+    # 添加时间戳确保唯一性
+    timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    
+    # 构建路径：username_assignmentid_timestamp_filename
+    # 使用下划线连接所有部分，确保没有中文字符
+    storage_path = f"{safe_username}_{safe_assignment_id}_{timestamp}_{safe_filename}"
+    
+    # 最后检查一次，确保没有中文字符
+    # 如果还有任何非ASCII字符，全部替换为下划线
+    final_path = []
+    for char in storage_path:
+        if ord(char) < 128:
+            final_path.append(char)
+        else:
+            final_path.append('_')
+    
+    storage_path = ''.join(final_path)
+    
+    # 再次清理可能产生的多个连续下划线
+    storage_path = re.sub(r'_+', '_', storage_path)
+    
+    return storage_path
+
+def validate_ascii_only(text):
+    """
+    验证字符串是否只包含ASCII字符
+    
+    Args:
+        text: 要验证的字符串
+    
+    Returns:
+        (bool, str) - 是否只包含ASCII，以及清理后的字符串
+    """
+    cleaned = []
+    has_non_ascii = False
+    
+    for char in text:
+        if ord(char) < 128:
+            cleaned.append(char)
+        else:
+            cleaned.append('_')
+            has_non_ascii = True
+    
+    cleaned_text = ''.join(cleaned)
+    return not has_non_ascii, cleaned_text
+
 # ==================== Supabase 初始化 ====================
 @st.cache_resource
 def init_supabase():
@@ -740,6 +906,14 @@ def upload_file_to_storage(file, bucket_name, storage_path):
         # 读取文件内容
         file_bytes = file.getbuffer()
         
+        # 验证存储路径是否只包含ASCII字符
+        is_ascii, cleaned_path = validate_ascii_only(storage_path)
+        if not is_ascii:
+            print(f"警告：存储路径包含非ASCII字符，已清理: {storage_path} -> {cleaned_path}")
+            storage_path = cleaned_path
+        
+        print(f"最终存储路径: {storage_path}")
+        
         # 上传到 Storage
         response = supabase.storage.from_(bucket_name).upload(
             path=storage_path,
@@ -751,7 +925,9 @@ def upload_file_to_storage(file, bucket_name, storage_path):
         public_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
         return True, public_url, storage_path
     except Exception as e:
-        return False, str(e), None
+        error_msg = str(e)
+        print(f"上传失败详细错误: {error_msg}")
+        return False, error_msg, None
 
 def download_file_from_storage(bucket_name, storage_path):
     """从 Supabase Storage 下载文件"""
@@ -785,17 +961,16 @@ def save_uploaded_files_to_storage(uploaded_files, student_username, assignment_
     
     if uploaded_files:
         for uploaded_file in uploaded_files:
-            # 生成存储路径: student_username/assignment_id/timestamp_filename
-            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-            safe_filename = "".join(c for c in uploaded_file.name if c.isalnum() or c in "._- ").rstrip()
-            safe_filename = safe_filename.replace(' ', '_')
+            # 使用安全路径创建函数生成存储路径
+            storage_path = create_safe_storage_path(
+                student_username, 
+                assignment_id, 
+                uploaded_file.name
+            )
             
-            # 确保所有参数都是安全的
-            safe_username = str(student_username).replace('/', '_').replace('\\', '_')
-            safe_assignment_id = str(assignment_id).replace('/', '_').replace('\\', '_')
-            
-            # 使用下划线连接，避免使用斜杠
-            storage_path = f"{safe_username}_{safe_assignment_id}_{timestamp}_{safe_filename}"
+            print(f"上传文件: {uploaded_file.name}")
+            print(f"原始文件名中的字符: {[ord(c) for c in uploaded_file.name]}")
+            print(f"生成的存储路径: {storage_path}")
             
             # 上传文件
             success, result, path = upload_file_to_storage(
@@ -811,6 +986,7 @@ def save_uploaded_files_to_storage(uploaded_files, student_username, assignment_
                 print(f"文件已上传: {storage_path}")
             else:
                 st.error(f"文件 {uploaded_file.name} 上传失败: {result}")
+                print(f"上传失败详情: {result}")
     
     return saved_files, file_paths, public_urls
 
@@ -824,34 +1000,15 @@ def save_teacher_files_to_storage(uploaded_files, teacher_username, assignment_i
     
     if uploaded_files:
         for uploaded_file in uploaded_files:
-            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-            
-            # 清理文件名 - 只保留安全字符
-            safe_filename = "".join(c for c in uploaded_file.name if c.isalnum() or c in "._-").rstrip()
-            safe_filename = safe_filename.replace(' ', '_')
-            
-            # 关键修复：确保 assignment_id 是安全的
-            # 如果 assignment_id 是整数，直接转换
-            if isinstance(assignment_id, int):
-                safe_assignment_id = str(assignment_id)
-            else:
-                # 如果是字符串，移除所有可能的路径分隔符
-                safe_assignment_id = str(assignment_id).replace('/', '_').replace('\\', '_')
-                # 只保留安全字符
-                safe_assignment_id = "".join(c for c in safe_assignment_id if c.isalnum() or c in "._-")
-            
-            # 确保 teacher_username 也是安全的
-            safe_username = str(teacher_username).replace('/', '_').replace('\\', '_')
-            safe_username = "".join(c for c in safe_username if c.isalnum() or c in "._-")
-            
-            # 生成存储路径：使用下划线连接所有部分，绝对不使用斜杠
-            storage_path = f"{safe_username}_{safe_assignment_id}_{timestamp}_{safe_filename}"
-            
-            # 最终确保没有任何斜杠
-            storage_path = storage_path.replace('/', '_').replace('\\', '_')
+            # 使用安全路径创建函数生成存储路径
+            storage_path = create_safe_storage_path(
+                teacher_username, 
+                assignment_id, 
+                uploaded_file.name
+            )
             
             print(f"上传文件: {uploaded_file.name}")
-            print(f"存储路径: {storage_path}")
+            print(f"生成的存储路径: {storage_path}")
             
             success, result, path = upload_file_to_storage(
                 uploaded_file, 
@@ -1323,12 +1480,8 @@ def save_experiment_card(assignment_id, teacher_username, card_content, uploaded
         file_paths = []
         
         if uploaded_files:
-            # 在传递之前确保所有参数都是安全的
-            safe_username = str(teacher_username).replace('/', '_').replace('\\', '_')
-            safe_assignment_id = str(assignment_id).replace('/', '_').replace('\\', '_')
-            
             saved_files, file_paths, _ = save_teacher_files_to_storage(
-                uploaded_files, safe_username, safe_assignment_id, "experiment_cards"
+                uploaded_files, teacher_username, assignment_id, "experiment_cards"
             )
         
         experiment_card_content = card_content
@@ -1419,7 +1572,7 @@ def download_experiment_card(assignment_id):
                     if storage_path:
                         success, file_data = download_file_from_storage(BUCKET_EXPERIMENT_CARDS, storage_path)
                         if success:
-                            original_filename = storage_path.split('_')[-1]
+                            original_filename = storage_path.split('_')[-1] if '_' in storage_path else f"file_{i+1}"
                             zipf.writestr(os.path.join("附件", original_filename), file_data)
         
         return zip_path, None
@@ -1877,7 +2030,7 @@ def render_sidebar():
         st.markdown("**📊 系统信息**")
         st.text(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
         st.text("状态: 🟢 正常运行")
-        st.text("版本: v3.0.0 (Supabase Storage)")
+        st.text("版本: v3.0.0 (Supabase Storage with enhanced sanitization)")
 
 render_sidebar()
 
@@ -2936,44 +3089,6 @@ else:
                                         </div>
                                     </div>
                                     """, unsafe_allow_html=True)
-
-                    def send_final_assignment_to_email(uploaded_files, student_name, student_id, content):
-                        MY_EMAIL = st.secrets["EMAIL"]["address"]
-                        MY_PWD = st.secrets["EMAIL"]["password"]
-                        SMTP_SERVER = "smtp.qq.com"
-                        SMTP_PORT = 465
-
-                        msg = MIMEMultipart()
-                        msg['From'] = formataddr(("期末作业提交系统", MY_EMAIL))
-                        msg['To'] = MY_EMAIL
-                        msg['Subject'] = f"[{student_id}] {student_name} - 期末作业提交"
-
-                        text_content = f"""
-                                学生姓名：{student_name}
-                                学生学号：{student_id}
-                                项目报告内容：
-                                {content}
-                                """
-                        msg.attach(MIMEText(text_content, 'plain', 'utf-8'))
-
-                        if uploaded_files:
-                            for file in uploaded_files:
-                                part = MIMEBase('application', 'octet-stream')
-                                part.set_payload(file.getbuffer())
-                                encoders.encode_base64(part)
-                                part.add_header('Content-Disposition',
-                                                f'attachment; filename="{file.name}"')
-                                msg.attach(part)
-
-                        try:
-                            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
-                            server.login(MY_EMAIL, MY_PWD)
-                            server.sendmail(MY_EMAIL, [MY_EMAIL], msg.as_string())
-                            server.quit()
-                            return True
-                        except Exception as e:
-                            st.error(f"邮件发送失败：{str(e)}")
-                            return False
 
                     col1, col2 = st.columns([1, 2])
                     with col1:
